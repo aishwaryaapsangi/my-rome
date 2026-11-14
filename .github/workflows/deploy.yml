@@ -1,4 +1,4 @@
-name: Deploy Italy travel app to GitHub Pages
+name: Deploy La Dolce Vita Angular to GitHub Pages
 
 on:
   push:
@@ -11,20 +11,39 @@ permissions:
   id-token: write
 
 concurrency:
-  group: "pages"
+  group: github-pages
   cancel-in-progress: true
 
 jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Angular project
+        uses: actions/checkout@v4
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Install Angular dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build Angular for /my-rome/
+        run: npm run build -- --base-href /my-rome/
+      - name: Disable Jekyll
+        run: touch dist/my-rome/browser/.nojekyll
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Upload Angular output
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist/my-rome/browser
+
   deploy:
+    needs: build
+    runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v4
-        with:
-          path: "."
-      - id: deployment
+      - name: Publish Pages
+        id: deployment
         uses: actions/deploy-pages@v4
