@@ -6,7 +6,7 @@ const html=readFileSync('public/studio.html','utf8'),script=readFileSync('public
 const tick=()=>new Promise(resolve=>setTimeout(resolve,20));
 function create(mock){
  const errors=[],c=new VirtualConsole();c.on('jsdomError',e=>errors.push(String(e)));
- const dom=new JSDOM(html,{url:'https://aishwaryaapsangi.github.io/my-rome/studio.html',runScripts:'dangerously',pretendToBeVisual:true,virtualConsole:c,beforeParse(win){win.HTMLElement.prototype.scrollIntoView=function(){};win.alert=m=>errors.push('alert: '+m);win.confirm=()=>true;win.fetch=mock||async()=>({ok:true,json:async()=>({apiBaseUrl:''})})}});
+ const dom=new JSDOM(html,{url:'https://aishwaryaapsangi.github.io/my-rome/studio.html',runScripts:'dangerously',pretendToBeVisual:true,virtualConsole:c,beforeParse(win){win.HTMLElement.prototype.scrollIntoView=function(){};win.alert=m=>errors.push('alert: '+m);win.confirm=()=>true;win.fetch=mock||(async()=>({ok:true,json:async()=>({apiBaseUrl:''})}))}});
  dom.window.eval(script);
  return {win:dom.window,d:dom.window.document,errors,close:()=>dom.window.close()};
 }
