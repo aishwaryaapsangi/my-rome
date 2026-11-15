@@ -1,3 +1,5 @@
+import {getAuthStub,invokeAuth,pfsAvailable,pfsSearch} from './letsfg-free.mjs';
+export {LetsfgAuthStore} from './letsfg-free.mjs';
 // La Dolce Vita: private flight-search adapter for Cloudflare Workers.
 // Credentials are Cloudflare secrets (NEVER browser JavaScript or GitHub).
 const DEFAULT_ORIGIN='https://aishwaryaapsangi.github.io';
@@ -62,22 +64,52 @@ export async function serveSearch(request,env,context={}){
  const origin=incoming=== 'http://localhost:4200'?incoming:allow;
  const url=new URL(request.url);
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{'access-control-allow-origin':origin,'access-control-allow-methods':'GET, POST, OPTIONS','access-control-allow-headers':'Content-Type','vary':'Origin'}});
- if(url.pathname==='/api/health'&&request.method==='GET')return json({ready:!!(env.LETSFG_API_KEY||env.DUFFEL_ACCESS_TOKEN),providers:{letsfg:!!env.LETSFG_API_KEY,duffel:!!env.DUFFEL_ACCESS_TOKEN},message:!env.LETSFG_API_KEY&&!env.DUFFEL_ACCESS_TOKEN?'Add a provider secret to this Worker to enable real searches.':'Providers configured. Only fresh offers from the chosen dates are displayed.'},200,origin);
+ // Public browser never sees an OAuth bearer token, refresh token, or admin secret.
+ const auth=getAuthStub(env),admin=env.ADMIN_SETUP_TOKEN&&request.headers.get('Authorization')==='Bearer '+env.ADMIN_SETUP_TOKEN;
+ if(url.pathname==='/api/auth/start'&&request.method==='POST'){
+  if(!admin||!auth)return json({error:'Owner-only setup. Configure Cloudflare ADMIN_SETUP_TOKEN and the Durable Object.'},401,origin);
+  try{
+   const cb=new URL('/api/auth/callback',request.url);
+   if(cb.protocol!=='https:')return json({error:'OAuth setup requires a deployed HTTPS Worker.'},400,origin);
+   return json(await invokeAuth(auth,'/begin',{callbackUrl:cb.toString()}),200,origin);
+  }catch(e){return json({error:e.message},502,origin)}
+ }
+ if(url.pathname==='/api/auth/callback'&&request.method==='GET'){
+  if(!auth)return new Response('OAuth storage unavailable',{status:503});
+  try{
+   if(!url.searchParams.get('code')||!url.searchParams.get('state'))throw Error('Missing OAuth code or state.');
+   await invokeAuth(auth,'/callback',{code:url.searchParams.get('code'),state:url.searchParams.get('state')});
+   return new Response('<!doctype html><html><meta charset="utf-8"><title>LetsFG connected</title><body><h2>✈ LetsFG connected</h2><p>Your free flight-search connection is saved privately. You can close this page.</p></body></html>',{headers:{'content-type':'text/html; charset=utf-8','cache-control':'no-store','referrer-policy':'no-referrer','content-security-policy':"default-src 'none'; style-src 'unsafe-inline'"}});
+  }catch(e){return new Response('LetsFG connection failed. Please restart authorization from the owner setup. ('+String(e.message).slice(0,140)+')',{status:400,headers:{'content-type':'text/plain','cache-control':'no-store'}})}
+ }
+ if(url.pathname==='/api/auth/disconnect'&&request.method==='POST'){
+  if(!admin||!auth)return json({error:'Owner only'},401,origin);
+  try{return json(await invokeAuth(auth,'/disconnect'),200,origin)}catch(e){return json({error:e.message},502,origin)}
+ }
+ if(url.pathname==='/api/health'&&request.method==='GET'){
+  const freeReady=await pfsAvailable(env),freeEnabled=freeReady&&env.PUBLIC_SEARCH_ENABLED==='true';
+  const paidEnabled=env.ENABLE_PAID_LETSFG==='true'&&!!env.LETSFG_API_KEY;
+  const providers={letsfg:freeEnabled||paidEnabled,duffel:!!env.DUFFEL_ACCESS_TOKEN};
+  return json({ready:providers.letsfg||providers.duffel,providers,freeAccountConnected:freeReady,freeSearchEnabled:freeEnabled,
+   message:freeReady&&!freeEnabled?'Free LetsFG authorized but PUBLIC_SEARCH_ENABLED is false. Enable searches after configuring quota/security.':providers.letsfg||providers.duffel?'Ready for live search.':'Connect free LetsFG via the owner-only OAuth route; no paid API account is needed.'},200,origin);
+ }
  if(url.pathname!=='/api/search')return json({error:'Not found'},404,origin);
  if(request.method!=='POST')return json({error:'POST only'},405,origin);
  let input;try{const raw=await request.text();if(raw.length>3000)return json({error:'Request too large'},413,origin);input=validateSearch(JSON.parse(raw));}catch(e){return json({error:e.message||'Invalid request'},400,origin)}
  const providers=[];
- if(['all','letsfg'].includes(input.provider)&&env.LETSFG_API_KEY)providers.push({name:'LetsFG',fn:()=>letsfgSearch(input,env)});
+ const freeConnected=await pfsAvailable(env);
+ if(['all','letsfg'].includes(input.provider)&&freeConnected&&env.PUBLIC_SEARCH_ENABLED==='true')providers.push({name:'LetsFG Free',fn:async()=>{const data=await pfsSearch(input,env,{ip:request.headers.get('CF-Connecting-IP')||'unknown'});return data.offers}});
+ else if(['all','letsfg'].includes(input.provider)&&env.ENABLE_PAID_LETSFG==='true'&&env.LETSFG_API_KEY)providers.push({name:'LetsFG Developer (paid)',fn:()=>letsfgSearch(input,env)});
  if(['all','duffel'].includes(input.provider)&&env.DUFFEL_ACCESS_TOKEN)providers.push({name:'Duffel',fn:()=>duffelSearch(input,env)});
- if(!providers.length)return json({error:'No authorized provider configured. Connect LetsFG or Duffel in Worker secrets, then retry.',code:'NOT_CONFIGURED',offers:[]},503,origin);
+ if(!providers.length)return json({error:freeConnected?'Free LetsFG is authorized but search is disabled. Set PUBLIC_SEARCH_ENABLED=true after reviewing rate limits.':'Free LetsFG is not connected. Authorize it through the owner OAuth flow or configure an optional alternative provider.',code:'NOT_CONFIGURED',offers:[]},503,origin);
  const cache=typeof caches!=='undefined'?caches.default:null;
  const key=new Request('https://my-rome-cache.invalid/'+encodeURIComponent(JSON.stringify(input)));
  if(cache){try{const old=await cache.match(key);if(old){const body=await old.json();return json({...body,fromCache:true},200,origin)}}catch(_){}}
  const settled=await Promise.allSettled(providers.map(x=>x.fn()));const errors=[],offers=[];
- for(let i=0;i<settled.length;i++){const x=settled[i];if(x.status==='fulfilled')offers.push(...x.value);else errors.push({provider:providers[i].name,error:x.reason?.message||'Unknown provider error'})}
+ for(let i=0;i<settled.length;i++){const x=settled[i];if(x.status==='fulfilled')offers.push(...x.value);else errors.push({provider:providers[i].name,error:x.reason?.message||'Unknown provider error',status:x.reason?.status||502})}
  offers.sort((a,b)=>(a.isTest===b.isTest?0:a.isTest?1:-1)||a.totalPrice-b.totalPrice);
  const result={query:input,checkedAt:new Date().toISOString(),fromCache:false,offers:offers.slice(0,100),errors,providersQueried:providers.map(x=>x.name),source:'Live supplier search (not airline-direct checkout)',note:'Prices and seat availability may change. Duffel test-mode offers are marked as test data and must not be treated as real.'};
  if(cache&&offers.length&&!errors.length){try{await cache.put(key,new Response(JSON.stringify(result),{headers:{'Cache-Control':'public,max-age=120','Content-Type':'application/json'}}))}catch(_){}}
- return json(result,errors.length&&!offers.length?502:200,origin);
+ return json(result,errors.length&&!offers.length?(errors.some(e=>e.status===429)?429:502):200,origin);
 }
 export default {fetch:serveSearch};

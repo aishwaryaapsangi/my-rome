@@ -4,6 +4,25 @@
   "compatibility_date": "2026-11-01",
   "workers_dev": true,
   "vars": {
-    "ALLOWED_ORIGIN": "https://aishwaryaapsangi.github.io"
-  }
+    "ALLOWED_ORIGIN": "https://aishwaryaapsangi.github.io",
+    "PUBLIC_SEARCH_ENABLED": "false",
+    "MAX_DAILY_SEARCHES": "40",
+    "MAX_IP_DAILY_SEARCHES": "6"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "LETSFG_AUTH",
+        "class_name": "LetsfgAuthStore"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "free-letsfg-sqlite-v1",
+      "new_sqlite_classes": [
+        "LetsfgAuthStore"
+      ]
+    }
+  ]
 }
