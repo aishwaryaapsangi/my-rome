@@ -67,7 +67,7 @@ export async function serveSearch(request,env,context={}){
  // can legitimately send an unexpected Origin (including "null").
  // Do not apply the flight API's CORS origin allowlist to this separate setup route.
  const path=url.pathname.replace(/\/+$/,'')||'/';
- const publicNavigation=request.method==='GET'&&(path==='/api/connect'||path==='/api/auth/callback'||path==='/api/health');
+ const publicNavigation=request.method==='GET'&&(path==='/api/connect'||path==='/api/auth/callback');
  const privateOwnerForm=path==='/api/connect'&&request.method==='POST';
  const allowedOrigin=!incoming||incoming===allow||incoming==='http://localhost:4200'||sameOrigin;
  if(!publicNavigation&&!privateOwnerForm&&!allowedOrigin)
