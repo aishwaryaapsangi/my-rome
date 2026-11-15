@@ -114,6 +114,8 @@ test('owner connection page is no-JS, private form and redirects only to LetsFG 
  const html=await page.text();
  assert.match(html,/Connect free LetsFG/);
  assert.match(html,/type="password"/);
+ assert.match(html,/action="https:\/\/my-rome-flight-api\.aishwaryaapsangi25\.workers\.dev\/api\/connect"/);
+ assert.match(page.headers.get('content-security-policy'),/form-action 'self' https:\/\/my-rome-flight-api\.aishwaryaapsangi25\.workers\.dev/);
  assert.equal(html.includes(secret),false);
  assert.equal(page.headers.get('referrer-policy'),'no-referrer');
  const bad=await serveSearch(new Request('https://my-rome-flight-api.aishwaryaapsangi25.workers.dev/api/connect',{method:'POST',headers:{Origin:'https://my-rome-flight-api.aishwaryaapsangi25.workers.dev','content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({ownerToken:'incorrect-value'})}),v.env);
@@ -123,12 +125,14 @@ test('owner connection page is no-JS, private form and redirects only to LetsFG 
  try{
   globalThis.fetch=async url=>String(url).endsWith('/oauth/register')?Response.json({client_id:'test_client_123456'}):(()=>{throw Error('Unexpected OAuth request')})();
   const good=await serveSearch(new Request('https://my-rome-flight-api.aishwaryaapsangi25.workers.dev/api/connect',{method:'POST',headers:{Origin:'https://my-rome-flight-api.aishwaryaapsangi25.workers.dev','content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({ownerToken:secret})}),v.env);
-  assert.equal(good.status,303);
-  const target=new URL(good.headers.get('location'));
-  assert.equal(target.origin,'https://letsfg.co');
-  assert.equal(target.pathname,'/connect');
+  assert.equal(good.status,200);
+  assert.equal(good.headers.get('location'),null);
+  assert.match(good.headers.get('content-security-policy'),/form-action 'none'/);
+  const nextPage=await good.text();
+  assert.match(nextPage,/Continue to LetsFG/);
+  assert.match(nextPage,/href="https:\/\/letsfg\.co\/connect\?/);
+  assert.ok(!nextPage.includes(secret));
   assert.equal(v.store.has('pending'),true);
-  assert.ok(!good.headers.get('location').includes(secret));
  }finally{globalThis.fetch=orig}
 });
 
@@ -165,9 +169,11 @@ test('owner password protects OAuth setup regardless of browser Origin or traili
   assert.equal(wrong.status,401);
   assert.equal(v.store.has('pending'),false);
   const webview=await serveSearch(new Request(base+'/api/connect',{method:'POST',headers:{Origin:'null','content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({ownerToken:secret})}),v.env);
-  assert.equal(webview.status,303);
-  assert.equal(new URL(webview.headers.get('location')).origin,'https://letsfg.co');
-  assert.ok(!webview.headers.get('location').includes(secret));
+  assert.equal(webview.status,200);
+  assert.equal(webview.headers.get('location'),null);
+  const nextPage=await webview.text();
+  assert.match(nextPage,/href="https:\/\/letsfg\.co\/connect\?/);
+  assert.ok(!nextPage.includes(secret));
   // The personal search API stays cross-origin restricted even with valid setup secret.
   const search=await serveSearch(new Request(base+'/api/search',{method:'POST',headers:{Origin:'https://chatgpt.com'},body:JSON.stringify(req)}),v.env);
   assert.equal(search.status,403);
