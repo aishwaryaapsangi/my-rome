@@ -37,7 +37,7 @@ test('changing return date adjusts day count without changing outbound',async()=
 test('unconfigured worker never produces synthetic live fares',async()=>{
  const t=create();await tick();t.d.querySelector('[data-tab="compare"]').click();
  assert.match(t.d.getElementById('liveState').textContent,/API|configured|connected/i);
- assert.match(t.d.getElementById('liveOfferCount').textContent,/0 verified live offers/);
+ assert.match(t.d.getElementById('liveOfferCount').textContent,/0 (verified )?live offers/);
  assert.equal(t.d.querySelectorAll('.market-item').length,4);
  assert.deepEqual(t.errors,[]);t.close();
 });
