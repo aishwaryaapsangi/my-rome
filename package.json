@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "ng serve",
-    "build": "ng build"
+    "build": "ng build",
+    "test": "node --test tests/*.test.mjs"
   },
   "engines": {
     "node": ">=22.16.0"
@@ -22,6 +23,7 @@
     "@angular/build": "^21.2.0",
     "@angular/cli": "^21.2.0",
     "@angular/compiler-cli": "^21.2.0",
-    "typescript": "~5.9.0"
+    "typescript": "~5.9.0",
+    "jsdom": "^26.1.0"
   }
 }
