@@ -61,7 +61,7 @@ export async function serveSearch(request,env,context={}){
  if(incoming&&incoming!==allow&&incoming!=='http://localhost:4200')return json({error:'Origin not allowed'},403,allow);
  const origin=incoming=== 'http://localhost:4200'?incoming:allow;
  const url=new URL(request.url);
- if(request.method==='OPTIONS')return json({},204,origin);
+ if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{'access-control-allow-origin':origin,'access-control-allow-methods':'GET, POST, OPTIONS','access-control-allow-headers':'Content-Type','vary':'Origin'}});
  if(url.pathname==='/api/health'&&request.method==='GET')return json({ready:!!(env.LETSFG_API_KEY||env.DUFFEL_ACCESS_TOKEN),providers:{letsfg:!!env.LETSFG_API_KEY,duffel:!!env.DUFFEL_ACCESS_TOKEN},message:!env.LETSFG_API_KEY&&!env.DUFFEL_ACCESS_TOKEN?'Add a provider secret to this Worker to enable real searches.':'Providers configured. Only fresh offers from the chosen dates are displayed.'},200,origin);
  if(url.pathname!=='/api/search')return json({error:'Not found'},404,origin);
  if(request.method!=='POST')return json({error:'POST only'},405,origin);
