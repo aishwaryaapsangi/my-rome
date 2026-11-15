@@ -62,14 +62,16 @@ export async function serveSearch(request,env,context={}){
  const incoming=request.headers.get('Origin');
  const url=new URL(request.url);
  const sameOrigin=incoming===url.origin;
- // Safe HTML page and OAuth callback are top-level browser navigations.
- // A browser/link preview may attach its own Origin; it isn't an API caller.
- // CSRF-sensitive POST setup and search requests keep strict origin validation.
- const navigationalGet=request.method==='GET'&&
-  (url.pathname==='/api/connect'||url.pathname==='/api/auth/callback');
+ // OAuth setup is authenticated by the privately configured ADMIN_SETUP_TOKEN,
+ // never by an Origin header. Browsers, link previews and webview form submissions
+ // can legitimately send an unexpected Origin (including "null").
+ // Do not apply the flight API's CORS origin allowlist to this separate setup route.
+ const path=url.pathname.replace(/\\/+$/,'')||'/';
+ const publicNavigation=request.method==='GET'&&(path==='/api/connect'||path==='/api/auth/callback'||path==='/api/health');
+ const privateOwnerForm=path==='/api/connect'&&request.method==='POST';
  const allowedOrigin=!incoming||incoming===allow||incoming==='http://localhost:4200'||sameOrigin;
- if(!navigationalGet&&!allowedOrigin)
-  return json({error:'Origin not allowed. Open the LetsFG setup link directly in a new browser tab (not the Cloudflare or chat preview).'},403,allow);
+ if(!publicNavigation&&!privateOwnerForm&&!allowedOrigin)
+  return json({error:'Origin not allowed'},403,allow);
  const origin=sameOrigin?url.origin:incoming==='http://localhost:4200'?incoming:allow;
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{'access-control-allow-origin':origin,'access-control-allow-methods':'GET, POST, OPTIONS','access-control-allow-headers':'Content-Type','vary':'Origin'}});
  // Public browser never sees an OAuth bearer token, refresh token, or admin secret.
@@ -78,7 +80,7 @@ export async function serveSearch(request,env,context={}){
  // A private ADMIN_SETUP_TOKEN is POSTed to this Worker over HTTPS and is never stored in the browser.
  const connectHeaders={'content-type':'text/html; charset=utf-8','cache-control':'no-store','referrer-policy':'no-referrer',
   'x-content-type-options':'nosniff','content-security-policy':"default-src 'none'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'; style-src 'unsafe-inline'"};
- if(url.pathname==='/api/connect'&&request.method==='GET'){
+ if(path==='/api/connect'&&request.method==='GET'){
   const page='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connect free LetsFG</title><style>body{font:16px system-ui;margin:0 auto;padding:8vh 22px;max-width:540px;line-height:1.55;background:#fff9f5;color:#26212b}main{border:1px solid #eadadf;background:white;padding:28px;border-radius:18px}input,button{box-sizing:border-box;width:100%;padding:13px;font:inherit;border-radius:10px}input{border:1px solid #aaa}button{border:0;background:#b63873;color:white;margin-top:14px;cursor:pointer}small{color:#655966}code{font-size:90%}</style></head><body><main><h1>✈ Connect free LetsFG</h1><p>This private setup connects your personal LetsFG account to the La Dolce Vita flight API. No card is needed just for free flight searches.</p><form method="POST" action="/api/connect"><label for="ownerToken"><b>Cloudflare ADMIN_SETUP_TOKEN</b></label><p><input id="ownerToken" name="ownerToken" type="password" autocomplete="off" required minlength="32" placeholder="Your private owner setup token"></p><button type="submit">Connect my LetsFG account</button></form><p><small>Keep this token private. It is sent only to your own HTTPS Cloudflare Worker and is not saved in browser storage. After approving LetsFG, close the confirmation page.</small></p></main></body></html>';
   return new Response(page,{status:200,headers:connectHeaders});
  }
@@ -104,7 +106,7 @@ export async function serveSearch(request,env,context={}){
    return json(await invokeAuth(auth,'/begin',{callbackUrl:cb.toString()}),200,origin);
   }catch(e){return json({error:e.message},502,origin)}
  }
- if(url.pathname==='/api/auth/callback'&&request.method==='GET'){
+ if(path==='/api/auth/callback'&&request.method==='GET'){
   if(!auth)return new Response('OAuth storage unavailable',{status:503});
   try{
    if(!url.searchParams.get('code')||!url.searchParams.get('state'))throw Error('Missing OAuth code or state.');
@@ -116,7 +118,7 @@ export async function serveSearch(request,env,context={}){
   if(!admin||!auth)return json({error:'Owner only'},401,origin);
   try{return json(await invokeAuth(auth,'/disconnect'),200,origin)}catch(e){return json({error:e.message},502,origin)}
  }
- if(url.pathname==='/api/health'&&request.method==='GET'){
+ if(path==='/api/health'&&request.method==='GET'){
   const freeReady=await pfsAvailable(env),freeEnabled=freeReady&&env.PUBLIC_SEARCH_ENABLED==='true';
   const paidEnabled=env.ENABLE_PAID_LETSFG==='true'&&!!env.LETSFG_API_KEY;
   const providers={letsfg:freeEnabled||paidEnabled,duffel:!!env.DUFFEL_ACCESS_TOKEN};
