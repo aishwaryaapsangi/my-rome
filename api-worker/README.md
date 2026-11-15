@@ -1,50 +1,72 @@
-# 🔐 Secure real-time flight-search API for La Dolce Vita
+# Free LetsFG searches in La Dolce Vita
 
-The website uses **GitHub Pages** and cannot hold API secrets. This optional **Cloudflare Worker** performs authenticated searches and returns normalized results to the Angular travel studio.
+This backend uses the **free personal LetsFG PFS** flow (not its paid Developer API) through a Cloudflare Worker with a SQLite-backed Durable Object. Your Angular website stays on GitHub Pages.
 
-## Source selection
+**Current status:** The code is ready but no Cloudflare deployment or flight-provider OAuth connection has been authorized yet. A LetsFG connection inside ChatGPT does NOT hand a token to this independent website.
 
-**1. LetsFG — recommended first for multi-airline comparison.** The open-source [LetsFG/LetsFG](https://github.com/LetsFG/LetsFG) repository is MIT-licensed. We use its *documented hosted API* instead of copying its scraping engine. The stable developer API accepts `date_from`, `return_from`, `adults`, cabin and max stops and can return flights from multiple airlines/OTAs. The Developer API requires a separate account, a payment method and `LETSFG_API_KEY`. Verify billing terms [here](https://letsfg.co/developers/docs/api-guide/index.html). **We have not created a LetsFG account or made any live fare calls.**
+## How it works
 
-**2. Duffel — optional fallback.** Its offer requests use two date-specific slices and multiple adult passengers. It may not include every airline. Tokens can be test or live; **test offers are explicitly flagged** and excluded from the live winner calculation. Create and manage a token via [Duffel](https://duffel.com/docs/api/v2/offer-requests).
+1. Cloudflare Durable Object performs LetsFG's OAuth dynamic client registration and PKCE authorization code exchange after the owner approves in a browser.
+2. Refresh tokens rotate and are persisted before the new access token is used. The access token lasts about one hour. Nothing is sent to GitHub Pages.
+3. The backend starts a free PFS search at POST https://letsfg.co/api/search, then polls GET /api/results/{search_id} every 2 seconds, including any pending split-ticket/enrichment phase (up to 75 seconds).
+4. The frontend shows only returned, exact-date live offers; never estimates masquerading as real quotes. No booking/payment routes are available.
+5. The search endpoint defaults **OFF**. After owner approval, the user may set PUBLIC_SEARCH_ENABLED=true. The Worker limits searches to 40/day deployment-wide and 6/day per IP by default. Limits reduce quota abuse but do not secure a public website against determined outsiders.
 
-## Activate the Worker
+## Step 1 — Free Cloudflare Worker
 
-1. Create a Cloudflare account / Workers deployment. For GitHub Actions, add repository **Actions secrets** `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` (restricted as Cloudflare recommends).
-2. Run GitHub workflow **Deploy private flight search API**. It publishes `api-worker/wrangler.json` and reports a `*.workers.dev` URL.
-3. In Cloudflare Worker **Settings → Variables and Secrets**, create a secret `LETSFG_API_KEY` (or `DUFFEL_ACCESS_TOKEN`). **Never paste keys into HTML, chat, GitHub files, or public runtime-config.**
-4. Check `GET https://your-worker.workers.dev/api/health` returns `ready:true`.
-5. Put only the **public HTTPS Worker base URL** in `public/runtime-config.json`, e.g. `{"apiBaseUrl":"https://my-rome-flight-api.YOUR-SUBDOMAIN.workers.dev"}`. Push `main`; GitHub Pages redeploys.
-6. Configure Cloudflare **WAF rate limiting**, preferably a Turnstile challenge and spend limits before exposing a charged API. The Worker includes short caching and date validation, but CORS alone **does not prevent non-browser abuse**. Use a restrictive budget on your provider account.
+Sign into https://dash.cloudflare.com/ and prepare a Cloudflare Workers Free account. SQLite-backed Durable Objects work on Workers Free.
 
-## Browser → Worker contract
+In GitHub repository https://github.com/aishwaryaapsangi/my-rome/settings/secrets/actions, add your Cloudflare-owned deploy credentials as Actions secrets:
+- CLOUDFLARE_API_TOKEN (narrow Workers deployment permission)
+- CLOUDFLARE_ACCOUNT_ID
 
-```http
-POST /api/search
-Content-Type: application/json
+Never paste them into chat or commit them to files.
 
-{
-  "origin":"BOS",
-  "destination":"FCO",
-  "departure":"2027-07-19",
-  "returnDate":"2027-07-26",
-  "adults":4,
-  "cabin":"M",
-  "maxStops":1,
-  "provider":"all"
-}
-```
+Run the manually triggered https://github.com/aishwaryaapsangi/my-rome/actions/workflows/deploy-worker.yml workflow on main.
 
-Response contains `offers[]` with `airline`, `pricePerPerson`, `totalPrice`, `currency`, `source`, `bookingUrl`, `stopsOutbound`, `stopsReturn`, `durationMinutes`, `isTest`, `selfTransfer`, `splitTicket`, `expiresAt`, `checkedAt`, `errors[]`, and the exact request `query`. All prices correspond to the requested date pair, not historic examples.
+Find the deployed API public HTTPS URL ending in workers.dev in the Cloudflare dashboard. No URL has been deployed by ChatGPT yet.
 
-No bookings or payments are performed by this code. Always recheck availability and final baggage-inclusive costs with the seller.
+## Step 2 — Owner authorizes free LetsFG OAuth
 
-## Developing locally
+In Cloudflare Worker Settings → Variables and Secrets, add a private ADMIN_SETUP_TOKEN (a random 32-byte or longer owner password). Generate a random string locally using the command openssl rand -hex 32. Optionally add QUOTA_SALT as another secret. Do not share either.
 
-```bash
-node --test tests/api-worker.test.mjs
-cd api-worker
-npx wrangler dev
-```
+From your terminal, set WORKER_BASE to your real HTTPS Cloudflare URL and ADMIN_SETUP_TOKEN to your secret (neither belongs in GitHub). Call the owner-only route:
 
-If you want self-serve searches without obtaining provider API credentials, [LetsFG](https://letsfg.co/) also has its own hosted consumer search; that is **separate** from your own website and cannot directly populate its in-app price list.
+    curl -fsS -X POST "$WORKER_BASE/api/auth/start" -H "Authorization: Bearer $ADMIN_SETUP_TOKEN"
+
+Its JSON response has an authorizationUrl. Open it in your browser, review LetsFG permissions, then approve. LetsFG returns to the Worker's /api/auth/callback URL. The Worker stores OAuth credentials in the Durable Object and refreshes them when they expire.
+
+The owner can later revoke the local connection with:
+
+    curl -fsS -X POST "$WORKER_BASE/api/auth/disconnect" -H "Authorization: Bearer $ADMIN_SETUP_TOKEN"
+
+Check GET $WORKER_BASE/api/health. Before public search is enabled, the response will report freeAccountConnected:true and ready:false.
+
+Do NOT create a paid LetsFG Developer API account just to use free personal search. Paid Developer calls remain disabled by default (ENABLE_PAID_LETSFG must be explicitly true for that separate mode).
+
+## Step 3 — Opt in to searches and connect the website
+
+In the Cloudflare Worker's configuration, set PUBLIC_SEARCH_ENABLED=true only once you are ready to spend your free personal search quota. The version-controlled api-worker/wrangler.json defaults to false, so future Wrangler deployments may restore false. Confirm the effective setting after each deployment.
+
+Verify GET $WORKER_BASE/api/health reports ready:true.
+
+In the public file https://github.com/aishwaryaapsangi/my-rome/blob/main/public/runtime-config.json, set the apiBaseUrl property to the public HTTPS Worker base URL only, with no secret. Push to main and GitHub Pages redeploys. The app at https://aishwaryaapsangi.github.io/my-rome/ will then search fresh LetsFG offers for the selected departure, return and passenger count.
+
+## Security and availability
+
+- This is your own free PERSONAL search allowance, not a public high-volume API license. LetsFG currently limits free PFS searches to 10/10 minutes, 30/hour and 100/day per user; our deployment limit is intentionally lower.
+- CORS alone is not authentication. A determined public visitor can still use up your personal allowance. For private-only use, protect the site and Worker with authentication (for example Cloudflare Access), or leave searches disabled.
+- Do not store bearer/refresh tokens in the frontend. OAuth credentials never pass through the GitHub app.
+- If LetsFG returns 401, reconnect through the owner-only OAuth route. If it returns 429, do not retry automatically.
+- Supplier prices are snapshots and can expire; self-transfer/unprotected connections need extra care. No booking or payment is performed here.
+- No production search has been made or tested without the user's OAuth approval.
+
+## References
+
+LetsFG OAuth: https://letsfg.co/developers/docs/mcp/index.html
+
+LetsFG PFS polling: https://letsfg.co/developers/docs/agent-guide/index.html
+
+Cloudflare Workers Free: https://developers.cloudflare.com/workers/platform/limits/
+
+Cloudflare Durable Objects Free: https://developers.cloudflare.com/durable-objects/platform/pricing/

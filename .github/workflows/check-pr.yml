@@ -22,3 +22,5 @@ jobs:
         run: npm test
       - name: Compile Angular for GitHub Pages
         run: npm run build -- --base-href /my-rome/
+      - name: Validate free Cloudflare Worker bundle (no Cloudflare credentials)
+        run: npx --yes wrangler@4 deploy --dry-run --config api-worker/wrangler.json --outdir /tmp/my-rome-worker-build

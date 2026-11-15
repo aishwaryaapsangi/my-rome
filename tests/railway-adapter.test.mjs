@@ -13,7 +13,7 @@ function open(env={}) {
 }
 const origin='https://aishwaryaapsangi.github.io';
 test('Node handler checks provider configuration without disclosing a secret',async()=>{
- const app=await open({LETSFG_API_KEY:'super-private-example',ALLOWED_ORIGIN:origin});
+ const app=await open({LETSFG_API_KEY:'super-private-example',ENABLE_PAID_LETSFG:'true',ALLOWED_ORIGIN:origin});
  try{
   const r=await fetch(app.url+'/api/health',{headers:{Origin:origin}});
   assert.equal(r.status,200);

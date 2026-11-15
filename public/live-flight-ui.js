@@ -38,14 +38,14 @@ async function init(){
   state.apiBase=base;
   const reply=await fetch(base+'/api/health',{cache:'no-store'}),health=await reply.json();
   state.ready=reply.ok&&health.ready===true;
-  status(state.ready?'🟢 Flight API connected: '+Object.keys(health.providers||{}).filter(k=>health.providers[k]).join(' + ')+'. Pick dates to search fresh offers.':'Flight API reached, but no provider has been authorized. Set LETSFG_API_KEY or DUFFEL_ACCESS_TOKEN in Worker secrets.',state.ready?'ready':'error');
+  status(state.ready?'🟢 Flight API connected: '+Object.keys(health.providers||{}).filter(k=>health.providers[k]).join(' + ')+'. Pick dates to search fresh offers.':String(health.message||'Connect your free LetsFG account through the private Cloudflare OAuth flow.'),state.ready?'ready':'error');
  }catch(e){status('Live provider unavailable. The browser cannot keep an API key. '+e.message,'error')}
  render();
 }
 async function search(){
  const serial=++state.serial,q=query(),invalid=isValid(q);
  if(invalid){status(invalid);return}
- if(!state.ready){status('No live provider connected. Configure the Cloudflare Worker and a licensed LetsFG/Duffel credential. No sample prices are presented as live.');return}
+ if(!state.ready){status('Free LetsFG is not yet authorized or public search is disabled. Connect your account through the Worker owner setup, then enable searching. No prices are invented.');return}
  status('Searching live flights for '+q.departure+' → '+q.returnDate+', '+q.adults+' travelers…','loading');
  const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),95000);
  try{
