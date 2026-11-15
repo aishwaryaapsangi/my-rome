@@ -131,3 +131,19 @@ test('owner connection page is no-JS, private form and redirects only to LetsFG 
   assert.ok(!good.headers.get('location').includes(secret));
  }finally{globalThis.fetch=orig}
 });
+
+test('top-level LetsFG connection GET works even when link preview supplies a foreign Origin',async()=>{
+ const env={ALLOWED_ORIGIN:'https://aishwaryaapsangi.github.io'};
+ const base='https://my-rome-flight-api.aishwaryaapsangi25.workers.dev';
+ const page=await serveSearch(new Request(base+'/api/connect',{method:'GET',headers:{Origin:'https://chatgpt.com'}}),env);
+ assert.equal(page.status,200);
+ assert.equal(page.headers.get('content-type'),'text/html; charset=utf-8');
+ assert.match(await page.text(),/Connect free LetsFG/);
+ const unsafe=await serveSearch(new Request(base+'/api/connect',{method:'POST',headers:{Origin:'https://chatgpt.com','content-type':'application/x-www-form-urlencoded'},body:'ownerToken=not-important'}),env);
+ assert.equal(unsafe.status,403);
+ assert.match((await unsafe.json()).error,/new browser tab/i);
+ const flight=await serveSearch(new Request(base+'/api/search',{method:'POST',headers:{Origin:'https://chatgpt.com','content-type':'application/json'},body:JSON.stringify(req)}),env);
+ assert.equal(flight.status,403);
+ const site=await serveSearch(new Request(base+'/api/health',{method:'GET',headers:{Origin:'https://aishwaryaapsangi.github.io'}}),env);
+ assert.equal(site.status,200);
+});

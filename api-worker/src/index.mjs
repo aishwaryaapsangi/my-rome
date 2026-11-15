@@ -62,7 +62,14 @@ export async function serveSearch(request,env,context={}){
  const incoming=request.headers.get('Origin');
  const url=new URL(request.url);
  const sameOrigin=incoming===url.origin;
- if(incoming&&incoming!==allow&&incoming!=='http://localhost:4200'&&!sameOrigin)return json({error:'Origin not allowed'},403,allow);
+ // Safe HTML page and OAuth callback are top-level browser navigations.
+ // A browser/link preview may attach its own Origin; it isn't an API caller.
+ // CSRF-sensitive POST setup and search requests keep strict origin validation.
+ const navigationalGet=request.method==='GET'&&
+  (url.pathname==='/api/connect'||url.pathname==='/api/auth/callback');
+ const allowedOrigin=!incoming||incoming===allow||incoming==='http://localhost:4200'||sameOrigin;
+ if(!navigationalGet&&!allowedOrigin)
+  return json({error:'Origin not allowed. Open the LetsFG setup link directly in a new browser tab (not the Cloudflare or chat preview).'},403,allow);
  const origin=sameOrigin?url.origin:incoming==='http://localhost:4200'?incoming:allow;
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{'access-control-allow-origin':origin,'access-control-allow-methods':'GET, POST, OPTIONS','access-control-allow-headers':'Content-Type','vary':'Origin'}});
  // Public browser never sees an OAuth bearer token, refresh token, or admin secret.
