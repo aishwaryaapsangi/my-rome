@@ -26,7 +26,7 @@ test('live LetsFG endpoint passes exact return date, adults and produces normali
  const original=globalThis.fetch;let sent;
  try{
   globalThis.fetch=async(url,opts)=>{sent=JSON.parse(opts.body);return new Response(JSON.stringify({offers:[{id:'sample',price:750,currency:'USD',owner_airline:'TAP Air Portugal'}]}),{status:200,headers:{'content-type':'application/json'}})};
-  const r=await serveSearch(request({...query,provider:'letsfg'}),{LETSFG_API_KEY:'test-secret-do-not-commit'});
+  const r=await serveSearch(request({...query,provider:'letsfg'}),{LETSFG_API_KEY:'test-secret-do-not-commit',ENABLE_PAID_LETSFG:'true'});
   const body=await r.json();assert.equal(r.status,200);assert.equal(sent.date_from,query.departure);assert.equal(sent.return_from,query.returnDate);assert.equal(sent.adults,4);assert.equal(body.offers[0].totalPrice,3000);assert.equal(body.offers[0].isTest,false);
  }finally{globalThis.fetch=original}
 });
