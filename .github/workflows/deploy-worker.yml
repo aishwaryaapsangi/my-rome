@@ -1,7 +1,6 @@
 name: Deploy private flight search API (Cloudflare Workers)
 
-on:
-  workflow_dispatch:
+on: [workflow_dispatch]
 
 permissions:
   contents: read
