@@ -1,6 +1,12 @@
 name: Deploy private flight search API (Cloudflare Workers)
 
-on: [workflow_dispatch]
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'api-worker/**'
+      - '.github/workflows/deploy-worker.yml'
 
 permissions:
   contents: read

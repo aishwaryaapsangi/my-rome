@@ -105,3 +105,29 @@ test('paid LetsFG developer key alone never silently activates billable API',asy
  const r=await serveSearch(request,{LETSFG_API_KEY:'paid-but-not-opted-in'});
  assert.equal(r.status,503);assert.equal((await r.json()).code,'NOT_CONFIGURED');
 });
+
+test('owner connection page is no-JS, private form and redirects only to LetsFG with valid secret',async()=>{
+ const secret='owner-super-secret-this-is-only-for-a-unit-test-1234';
+ const v=vault({ADMIN_SETUP_TOKEN:secret});
+ const page=await serveSearch(new Request('https://my-rome-flight-api.aishwaryaapsangi25.workers.dev/api/connect'),v.env);
+ assert.equal(page.status,200);
+ const html=await page.text();
+ assert.match(html,/Connect free LetsFG/);
+ assert.match(html,/type="password"/);
+ assert.equal(html.includes(secret),false);
+ assert.equal(page.headers.get('referrer-policy'),'no-referrer');
+ const bad=await serveSearch(new Request('https://my-rome-flight-api.aishwaryaapsangi25.workers.dev/api/connect',{method:'POST',headers:{Origin:'https://my-rome-flight-api.aishwaryaapsangi25.workers.dev','content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({ownerToken:'incorrect-value'})}),v.env);
+ assert.equal(bad.status,401);
+ assert.equal(v.store.has('pending'),false);
+ const orig=globalThis.fetch;
+ try{
+  globalThis.fetch=async url=>String(url).endsWith('/oauth/register')?Response.json({client_id:'test_client_123456'}):(()=>{throw Error('Unexpected OAuth request')})();
+  const good=await serveSearch(new Request('https://my-rome-flight-api.aishwaryaapsangi25.workers.dev/api/connect',{method:'POST',headers:{Origin:'https://my-rome-flight-api.aishwaryaapsangi25.workers.dev','content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({ownerToken:secret})}),v.env);
+  assert.equal(good.status,303);
+  const target=new URL(good.headers.get('location'));
+  assert.equal(target.origin,'https://letsfg.co');
+  assert.equal(target.pathname,'/connect');
+  assert.equal(v.store.has('pending'),true);
+  assert.ok(!good.headers.get('location').includes(secret));
+ }finally{globalThis.fetch=orig}
+});
