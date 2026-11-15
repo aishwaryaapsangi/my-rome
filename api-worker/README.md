@@ -22,7 +22,7 @@ In GitHub repository https://github.com/aishwaryaapsangi/my-rome/settings/secret
 
 Never paste them into chat or commit them to files.
 
-Run the manually triggered https://github.com/aishwaryaapsangi/my-rome/actions/workflows/deploy-worker.yml workflow on main.
+Cloudflare deploys automatically when files under api-worker/ are merged into main. You can also run the https://github.com/aishwaryaapsangi/my-rome/actions/workflows/deploy-worker.yml workflow manually.
 
 Find the deployed API public HTTPS URL ending in workers.dev in the Cloudflare dashboard. No URL has been deployed by ChatGPT yet.
 
@@ -30,7 +30,7 @@ Find the deployed API public HTTPS URL ending in workers.dev in the Cloudflare d
 
 In Cloudflare Worker Settings → Variables and Secrets, add a private ADMIN_SETUP_TOKEN (a random 32-byte or longer owner password). Generate a random string locally using the command openssl rand -hex 32. Optionally add QUOTA_SALT as another secret. Do not share either.
 
-From your terminal, set WORKER_BASE to your real HTTPS Cloudflare URL and ADMIN_SETUP_TOKEN to your secret (neither belongs in GitHub). Call the owner-only route:
+**Recommended: open https://my-rome-flight-api.aishwaryaapsangi25.workers.dev/api/connect in your browser.** Paste the private ADMIN_SETUP_TOKEN you added to Cloudflare into the password field (not into ChatGPT), then click **Connect my LetsFG account**. The Worker redirects you to LetsFG to approve the free connection. This form does not use JavaScript and never puts the secret in the URL.\n\nAlternatively, from your terminal, set WORKER_BASE to your real HTTPS Cloudflare URL and ADMIN_SETUP_TOKEN to your secret (neither belongs in GitHub). Call the owner-only route:
 
     curl -fsS -X POST "$WORKER_BASE/api/auth/start" -H "Authorization: Bearer $ADMIN_SETUP_TOKEN"
 

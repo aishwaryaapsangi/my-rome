@@ -60,12 +60,35 @@ async function duffelSearch(req,env){
 export async function serveSearch(request,env,context={}){
  const allow=env.ALLOWED_ORIGIN||DEFAULT_ORIGIN;
  const incoming=request.headers.get('Origin');
- if(incoming&&incoming!==allow&&incoming!=='http://localhost:4200')return json({error:'Origin not allowed'},403,allow);
- const origin=incoming=== 'http://localhost:4200'?incoming:allow;
  const url=new URL(request.url);
+ const sameOrigin=incoming===url.origin;
+ if(incoming&&incoming!==allow&&incoming!=='http://localhost:4200'&&!sameOrigin)return json({error:'Origin not allowed'},403,allow);
+ const origin=sameOrigin?url.origin:incoming==='http://localhost:4200'?incoming:allow;
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{'access-control-allow-origin':origin,'access-control-allow-methods':'GET, POST, OPTIONS','access-control-allow-headers':'Content-Type','vary':'Origin'}});
  // Public browser never sees an OAuth bearer token, refresh token, or admin secret.
  const auth=getAuthStub(env),admin=env.ADMIN_SETUP_TOKEN&&request.headers.get('Authorization')==='Bearer '+env.ADMIN_SETUP_TOKEN;
+ // Simplest owner-only LetsFG setup: server-rendered form; no JavaScript, cookies, token-in-URL or external assets.
+ // A private ADMIN_SETUP_TOKEN is POSTed to this Worker over HTTPS and is never stored in the browser.
+ const connectHeaders={'content-type':'text/html; charset=utf-8','cache-control':'no-store','referrer-policy':'no-referrer',
+  'x-content-type-options':'nosniff','content-security-policy':"default-src 'none'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'; style-src 'unsafe-inline'"};
+ if(url.pathname==='/api/connect'&&request.method==='GET'){
+  const page='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connect free LetsFG</title><style>body{font:16px system-ui;margin:0 auto;padding:8vh 22px;max-width:540px;line-height:1.55;background:#fff9f5;color:#26212b}main{border:1px solid #eadadf;background:white;padding:28px;border-radius:18px}input,button{box-sizing:border-box;width:100%;padding:13px;font:inherit;border-radius:10px}input{border:1px solid #aaa}button{border:0;background:#b63873;color:white;margin-top:14px;cursor:pointer}small{color:#655966}code{font-size:90%}</style></head><body><main><h1>✈ Connect free LetsFG</h1><p>This private setup connects your personal LetsFG account to the La Dolce Vita flight API. No card is needed just for free flight searches.</p><form method="POST" action="/api/connect"><label for="ownerToken"><b>Cloudflare ADMIN_SETUP_TOKEN</b></label><p><input id="ownerToken" name="ownerToken" type="password" autocomplete="off" required minlength="32" placeholder="Your private owner setup token"></p><button type="submit">Connect my LetsFG account</button></form><p><small>Keep this token private. It is sent only to your own HTTPS Cloudflare Worker and is not saved in browser storage. After approving LetsFG, close the confirmation page.</small></p></main></body></html>';
+  return new Response(page,{status:200,headers:connectHeaders});
+ }
+ if(url.pathname==='/api/connect'&&request.method==='POST'){
+  try{
+   const raw=await request.text();
+   if(raw.length>1200)return new Response('Request too large',{status:413,headers:{'cache-control':'no-store'}});
+   const input=new URLSearchParams(raw);
+   const token=input.get('ownerToken');
+   if(!env.ADMIN_SETUP_TOKEN||!token||token!==env.ADMIN_SETUP_TOKEN||!auth)return new Response('Incorrect owner setup token or missing Cloudflare configuration. Return to /api/connect and retry.',{status:401,headers:{'content-type':'text/plain; charset=utf-8','cache-control':'no-store'}});
+   if(url.protocol!=='https:')return new Response('Use the deployed HTTPS Cloudflare URL for setup.',{status:400});
+   const response=await invokeAuth(auth,'/begin',{callbackUrl:new URL('/api/auth/callback',url).toString()});
+   const destination=new URL(response.authorizationUrl);
+   if(destination.origin!=='https://letsfg.co'||destination.pathname!=='/connect')throw Error('LetsFG returned an unexpected authorization URL');
+   return new Response(null,{status:303,headers:{'location':destination.toString(),'cache-control':'no-store','referrer-policy':'no-referrer'}});
+  }catch(e){return new Response('Connection could not start: '+String(e.message||e).slice(0,160),{status:502,headers:{'content-type':'text/plain; charset=utf-8','cache-control':'no-store'}})}
+ }
  if(url.pathname==='/api/auth/start'&&request.method==='POST'){
   if(!admin||!auth)return json({error:'Owner-only setup. Configure Cloudflare ADMIN_SETUP_TOKEN and the Durable Object.'},401,origin);
   try{
