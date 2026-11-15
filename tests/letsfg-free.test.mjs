@@ -140,8 +140,8 @@ test('top-level LetsFG connection GET works even when link preview supplies a fo
  assert.equal(page.headers.get('content-type'),'text/html; charset=utf-8');
  assert.match(await page.text(),/Connect free LetsFG/);
  const unsafe=await serveSearch(new Request(base+'/api/connect',{method:'POST',headers:{Origin:'https://chatgpt.com','content-type':'application/x-www-form-urlencoded'},body:'ownerToken=not-important'}),env);
- assert.equal(unsafe.status,403);
- assert.match((await unsafe.json()).error,/new browser tab/i);
+ assert.equal(unsafe.status,401);
+ assert.match(await unsafe.text(),/Incorrect owner setup token/i);
  const flight=await serveSearch(new Request(base+'/api/search',{method:'POST',headers:{Origin:'https://chatgpt.com','content-type':'application/json'},body:JSON.stringify(req)}),env);
  assert.equal(flight.status,403);
  const site=await serveSearch(new Request(base+'/api/health',{method:'GET',headers:{Origin:'https://aishwaryaapsangi.github.io'}}),env);
