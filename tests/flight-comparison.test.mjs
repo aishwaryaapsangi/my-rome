@@ -26,7 +26,7 @@ test('full HTML and standalone mirror both contain source comparison',()=>{
   assert.match(html,/publishedFares/);
   assert.match(html,/\$887 published\*/);
   assert.match(html,/\$781 published\*/);
-  assert.match(html,/No exact 10-day Delta\/ITA airline checkout fares recorded/);
+  assert.match(html,/No exact-date Delta\/ITA airline checkout fares recorded/);
 });
 test('comparing airlines stays in app and populates four example cards',()=>{
   const {document:d,errors,close}=boot();
