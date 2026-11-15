@@ -17,6 +17,5 @@ jobs:
           workingDirectory: api-worker
           command: deploy
 
-# Provider credentials are NOT part of this workflow or GitHub repository.
-# Set Worker secrets via Cloudflare dashboard:
-#   LETSFG_API_KEY or DUFFEL_ACCESS_TOKEN
+# The search endpoint defaults OFF until the owner authorizes OAuth and enables it.
+# No LetsFG credentials belong in GitHub Actions or the public website.
