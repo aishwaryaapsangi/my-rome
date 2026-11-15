@@ -1,0 +1,24 @@
+name: Deploy private flight search API (Cloudflare Workers)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: api-worker
+          command: deploy
+
+# Provider credentials are NOT part of this workflow or GitHub repository.
+# Set Worker secrets via Cloudflare dashboard:
+#   LETSFG_API_KEY or DUFFEL_ACCESS_TOKEN
